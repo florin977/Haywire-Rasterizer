@@ -3,8 +3,10 @@ mod custom_data_types;
 
 use custom_data_types::color::Color;
 use custom_data_types::draw_buffer::DrawBuffer;
+use custom_data_types::matrices::{Matrix4x4, RotationMatrices};
 use custom_data_types::point::Point;
 use custom_data_types::triangle::Triangle;
+use custom_data_types::vec4::Vec4;
 
 // external dependencies
 use minifb::{Key, Window, WindowOptions};
@@ -40,49 +42,52 @@ fn load_model(path: &str) -> Vec<Triangle> {
             let v2_y = mesh.positions[3 * idx2 + 1];
             let v2_z = mesh.positions[3 * idx2 + 2];
 
-            let scale_factor = 200.0;
-            let offset_x = 640.0;
-            let offset_y = 360.0;
-            // Placeholder for actual projection/conversion function
-            let point0 = Point::new((v0_x * scale_factor + offset_x) as i32, (v0_y * scale_factor + offset_y) as i32, (v0_z * scale_factor) as i32);
-            let point1 = Point::new((v1_x * scale_factor + offset_x) as i32, (v1_y * scale_factor + offset_y) as i32, (v1_z * scale_factor) as i32);
-            let point2 = Point::new((v2_x * scale_factor + offset_x) as i32, (v2_y * scale_factor + offset_y) as i32, (v2_z * scale_factor) as i32);
-            
-            let triangle = Triangle::new(point0, point1, point2);
+            let vec0 = Vec4::new(v0_x as f64, v0_y as f64, v0_z as f64, 1.0);
+            let vec1 = Vec4::new(v1_x as f64, v1_y as f64, v1_z as f64, 1.0);
+            let vec2 = Vec4::new(v2_x as f64, v2_y as f64, v2_z as f64, 1.0);
+
+            let triangle = Triangle::new(vec0, vec1, vec2);
 
             triangles.push(triangle);
-
         }
     }
 
     triangles
 }
 
-fn edge_function(a_x: i32, a_y: i32, b_x: i32, b_y: i32, c_x: i32, c_y: i32) -> i32 {
-
+fn edge_function(a_x: f64, a_y: f64, b_x: f64, b_y: f64, c_x: f64, c_y: f64) -> f64 {
     let result = (b_x - a_x) * (c_y - a_y) - (b_y - a_y) * (c_x - a_x);
     result
 }
 
-fn in_triangle(a_x: i32, a_y: i32, b_x: i32, b_y: i32, c_x: i32, c_y: i32, point_x: i32, point_y: i32) -> bool {
+fn in_triangle(
+    a_x: f64,
+    a_y: f64,
+    b_x: f64,
+    b_y: f64,
+    c_x: f64,
+    c_y: f64,
+    point_x: f64,
+    point_y: f64,
+) -> bool {
     let abp = edge_function(a_x, a_y, b_x, b_y, point_x, point_y);
     let bcp = edge_function(b_x, b_y, c_x, c_y, point_x, point_y);
     let cap = edge_function(c_x, c_y, a_x, a_y, point_x, point_y);
 
-    abp >= 0 && bcp >= 0 && cap >= 0
+    abp >= 0.0 && bcp >= 0.0 && cap >= 0.0
 }
 
 fn draw_triangle(draw_buffer: &mut DrawBuffer, triangle: &Triangle, color: Color) -> () {
-    let a_x = triangle.a().x();
-    let a_y = triangle.a().y();
-    let b_x = triangle.b().x();
-    let b_y = triangle.b().y();
-    let c_x = triangle.c().x();
-    let c_y = triangle.c().y();
+    let a_x = triangle.a().x;
+    let a_y = triangle.a().y;
+    let b_x = triangle.b().x;
+    let b_y = triangle.b().y;
+    let c_x = triangle.c().x;
+    let c_y = triangle.c().y;
 
     let area = edge_function(a_x, a_y, b_x, b_y, c_x, c_y);
 
-    if area <= 0 {
+    if area <= 0.0 {
         return;
     }
 
@@ -91,14 +96,14 @@ fn draw_triangle(draw_buffer: &mut DrawBuffer, triangle: &Triangle, color: Color
     let triangle_max_x = a_x.max(b_x.max(c_x));
     let triangle_max_y = a_y.max(b_y.max(c_y));
 
-    let min_x = triangle_min_x.max(0i32);
-    let min_y = triangle_min_y.max(0i32);
-    let max_x = triangle_max_x.min(draw_buffer.buffer_width() as i32);
-    let max_y = triangle_max_y.min(draw_buffer.buffer_height() as i32);
+    let min_x = (triangle_min_x as i32).max(0i32);
+    let min_y = (triangle_min_y as i32).max(0i32);
+    let max_x = (triangle_max_x as i32).min(draw_buffer.buffer_width() as i32);
+    let max_y = (triangle_max_y as i32).min(draw_buffer.buffer_height() as i32);
 
     for i in min_y..max_y {
         for j in min_x..max_x {
-            if in_triangle(a_x, a_y, b_x, b_y, c_x, c_y, j, i) {
+            if in_triangle(a_x, a_y, b_x, b_y, c_x, c_y, j as f64, i as f64) {
                 draw_buffer.set(i as usize, j as usize, color);
             }
         }
@@ -128,12 +133,6 @@ fn draw(draw_buffer: &mut DrawBuffer, window: &mut Window) -> () {
 fn main() {
     let mut draw_buffer = DrawBuffer::new(vec![0; 1280 * 720], 1280, 720);
 
-    let _a = Point::new(0, 0, 0);
-    let _b = Point::new(320, 0, 0);
-    let _c = Point::new(160, 100, 0);
-
-    let _triangle = Triangle::new(_a, _b, _c);
-
     let mut window = Window::new(
         "Haywire Rasterizer",
         draw_buffer.buffer_width(),
@@ -151,11 +150,36 @@ fn main() {
 
     let triangles: Vec<Triangle> = load_model("./assets/cube.obj");
 
+    let mut y_angle = 0.0;
+    let mut x_angle = 0.0;
+
     while window.is_open() && !window.is_key_down(Key::Escape) {
         handle_clear(&mut draw_buffer, &window);
 
+        y_angle += 0.01;
+        x_angle += 0.02;
+
+        let scale_mat = Matrix4x4::scaling(200.0);
+
+        let rot_struct = RotationMatrices::new(x_angle , y_angle, 0.0);
+        let rot_mat = rot_struct.get_rotation();
+
+        let trans_mat = Matrix4x4::translation(360.0, 180.0, 0.0);
+
+        let world_matrix = trans_mat * rot_mat * scale_mat;
+
         for i in 0..triangles.len() {
-            draw_triangle(&mut draw_buffer, &triangles[i], Color::new(color.r() + (i * 20) as u8, color.g() + (i * 20) as u8, color.b() + (i * 20) as u8, color.a()));
+            let v0_trans = world_matrix * triangles[i].a();
+            let v1_trans = world_matrix * triangles[i].b();
+            let v2_trans = world_matrix * triangles[i].c();
+
+            let tri_to_draw = Triangle::new(v0_trans, v1_trans, v2_trans);
+
+            let r = color.r().wrapping_add((i * 10) as u8);
+            let g = color.g().wrapping_add((i * 30) as u8);
+            let b = color.b().wrapping_add((i * 50) as u8);
+
+            draw_triangle(&mut draw_buffer, &tri_to_draw, Color::new(r, g, b, 255));
         }
 
         draw(&mut draw_buffer, &mut window);
