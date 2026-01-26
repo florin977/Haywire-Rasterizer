@@ -4,7 +4,6 @@ mod custom_data_types;
 use custom_data_types::color::Color;
 use custom_data_types::draw_buffer::DrawBuffer;
 use custom_data_types::matrices::{Matrix4x4, RotationMatrices};
-use custom_data_types::point::Point;
 use custom_data_types::triangle::Triangle;
 use custom_data_types::vec4::Vec4;
 
@@ -96,10 +95,10 @@ fn draw_triangle(draw_buffer: &mut DrawBuffer, triangle: &Triangle, color: Color
     let triangle_max_x = a_x.max(b_x.max(c_x));
     let triangle_max_y = a_y.max(b_y.max(c_y));
 
-    let min_x = (triangle_min_x as i32).max(0i32);
-    let min_y = (triangle_min_y as i32).max(0i32);
-    let max_x = (triangle_max_x as i32).min(draw_buffer.buffer_width() as i32);
-    let max_y = (triangle_max_y as i32).min(draw_buffer.buffer_height() as i32);
+    let min_x = (triangle_min_x.floor() as i32).max(0i32);
+    let min_y = (triangle_min_y.floor() as i32).max(0i32);
+    let max_x = (triangle_max_x.ceil() as i32).min(draw_buffer.buffer_width() as i32);
+    let max_y = (triangle_max_y.ceil() as i32).min(draw_buffer.buffer_height() as i32);
 
     for i in min_y..max_y {
         for j in min_x..max_x {
@@ -146,9 +145,7 @@ fn main() {
 
     window.set_target_fps(60);
 
-    let color: Color = Color::new(0, 0, 0, 255);
-
-    let triangles: Vec<Triangle> = load_model("./assets/cube.obj");
+    let triangles: Vec<Triangle> = load_model("./assets/suzzane.obj");
 
     let mut y_angle = 0.0;
     let mut x_angle = 0.0;
@@ -157,14 +154,14 @@ fn main() {
         handle_clear(&mut draw_buffer, &window);
 
         y_angle += 0.01;
-        x_angle += 0.02;
+        x_angle += 0.00;
 
-        let scale_mat = Matrix4x4::scaling(200.0);
+        let scale_mat = Matrix4x4::scaling(100.0);
 
         let rot_struct = RotationMatrices::new(x_angle , y_angle, 0.0);
         let rot_mat = rot_struct.get_rotation();
 
-        let trans_mat = Matrix4x4::translation(360.0, 180.0, 0.0);
+        let trans_mat = Matrix4x4::translation(320.0, 360.0, 0.0);
 
         let world_matrix = trans_mat * rot_mat * scale_mat;
 
@@ -174,12 +171,13 @@ fn main() {
             let v2_trans = world_matrix * triangles[i].c();
 
             let tri_to_draw = Triangle::new(v0_trans, v1_trans, v2_trans);
+            
+            if i % 2 == 0 {
+                draw_triangle(&mut draw_buffer, &tri_to_draw, Color::new(100, 250, 200, 255));
+            } else {
+                draw_triangle(&mut draw_buffer, &tri_to_draw, Color::new(255, 255, 255, 255));
+            }
 
-            let r = color.r().wrapping_add((i * 10) as u8);
-            let g = color.g().wrapping_add((i * 30) as u8);
-            let b = color.b().wrapping_add((i * 50) as u8);
-
-            draw_triangle(&mut draw_buffer, &tri_to_draw, Color::new(r, g, b, 255));
         }
 
         draw(&mut draw_buffer, &mut window);

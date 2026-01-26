@@ -72,8 +72,8 @@ impl Matrix4x4 {
     pub fn translation(x: f64, y: f64, z: f64) -> Self {
         let mut translation_mat = Matrix4x4::identity();
         translation_mat.data[0][3] = x;
-        translation_mat.data[1][3] = x;
-        translation_mat.data[2][3] = x;
+        translation_mat.data[1][3] = y;
+        translation_mat.data[2][3] = z;
 
         translation_mat
     }
