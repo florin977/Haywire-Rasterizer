@@ -3,37 +3,115 @@ use std::ops::Mul;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Matrix4x4 {
-    pub data: [[f64; 4]; 4],
+    pub data: [[f32; 4]; 4],
 }
 
-pub struct Matrix3x3 {
-    pub data: [[f64; 3]; 3]
+pub struct ModelMatrix {
+    translation: Vec4,
+    angle: Vec4,
+    scale: Vec4,
 }
-pub struct RotationMatrices {
-    xRotation: Matrix4x4,
-    yRotation: Matrix4x4,
-    zRotation: Matrix4x4,
-    /* === xRotation ===
-    [
-        [1,  0,    0,  0],
-        [0, cos, -sin, 0],
-        [0, sin,  cos, 0],
-        [0,  0,    0,  1],
-    ] */
-   /* === yRotation ===
-    [
-        [cos,  0, sin,  0],
-        [ 0,   1, -0,   0],
-        [-sin, 0, cos,  0],
-        [  0,  0,  0,   1],
-    ] */
-   /* === zRotation ===
-    [
-        [cos,  -sin,    0,  0],
-        [sin,   cos,    0,  0],
-        [ 0,     0,     1,  0],
-        [ 0,     0,     0,  1],
-    ] */
+
+impl ModelMatrix {
+    pub fn new(translation: Vec4, angle: Vec4, scale: Vec4) -> Self {
+        Self {
+            translation,
+            angle,
+            scale,
+        }
+    }
+
+    pub fn update_translate(&mut self, translation: Vec4) {
+        self.translation = translation;
+    }
+
+    pub fn update_angle(&mut self, angle: Vec4) {
+        self.angle = angle;
+    }
+
+    pub fn update_scale(&mut self, scale: Vec4) {
+        self.scale = scale;
+    }
+
+    pub fn get_model_matrix(&self) -> Matrix4x4 {
+        let mut model_matrix = Matrix4x4::identity();
+
+        let (sx, cx) = self.angle.x.sin_cos();
+        let (sy, cy) = self.angle.y.sin_cos();
+        let (sz, cz) = self.angle.z.sin_cos();
+
+        // The Rotation * Scale Matrix (RS)
+        // Row 1
+        model_matrix.data[0][0] = (cz * cy) * self.scale.x;
+        model_matrix.data[0][1] = (-sz * cx + cz * sy * sx) * self.scale.y;
+        model_matrix.data[0][2] = (sz * sx + cz * sy * cx) * self.scale.z;
+
+        // Row 2
+        model_matrix.data[1][0] = (sz * cy) * self.scale.x;
+        model_matrix.data[1][1] = (cz * cx + sz * sy * sx) * self.scale.y;
+        model_matrix.data[1][2] = (-cz * sx + sz * sy * cx) * self.scale.z;
+
+        // Row 3
+        model_matrix.data[2][0] = (-sy) * self.scale.x;
+        model_matrix.data[2][1] = (cy * sx) * self.scale.y;
+        model_matrix.data[2][2] = (cy * cx) * self.scale.z;
+
+        // Appending the translation
+        model_matrix.data[0][3] = self.translation.x;
+        model_matrix.data[1][3] = self.translation.y;
+        model_matrix.data[2][3] = self.translation.z;
+
+        model_matrix
+    }
+
+    pub fn get_view_matrix(&self) -> Matrix4x4 {
+        let mut view_matrix = Matrix4x4::identity();
+
+        let (sx, cx) = self.angle.x.sin_cos();
+        let (sy, cy) = self.angle.y.sin_cos();
+        let (sz, cz) = self.angle.z.sin_cos();
+
+        // This is the Camera's Rotation Matrix
+        let r00 = cy * cz;
+        let r01 = -cx * sz + sx * sy * cz;
+        let r02 = sx * sz + cx * sy * cz;
+
+        let r10 = cy * sz;
+        let r11 = cx * cz + sx * sy * sz;
+        let r12 = -sx * cz + cx * sy * sz;
+
+        let r20 = -sy;
+        let r21 = sx * cy;
+        let r22 = cx * cy;
+
+        // Building the View Matrix (The Inverse)
+
+        let x = self.translation.x;
+        let y = self.translation.y;
+        let z = self.translation.z;
+
+        view_matrix.data[0][0] = r00;
+        view_matrix.data[0][1] = r10;
+        view_matrix.data[0][2] = r20;
+        view_matrix.data[0][3] = -(r00 * x + r10 * y + r20 * z); // Dot product
+
+        view_matrix.data[1][0] = r01;
+        view_matrix.data[1][1] = r11;
+        view_matrix.data[1][2] = r21;
+        view_matrix.data[1][3] = -(r01 * x + r11 * y + r21 * z); // Dot product
+
+        view_matrix.data[2][0] = r02;
+        view_matrix.data[2][1] = r12;
+        view_matrix.data[2][2] = r22;
+        view_matrix.data[2][3] = -(r02 * x + r12 * y + r22 * z); // Dot product
+
+        view_matrix.data[3][0] = 0.0;
+        view_matrix.data[3][1] = 0.0;
+        view_matrix.data[3][2] = 0.0;
+        view_matrix.data[3][3] = 1.0;
+
+        view_matrix
+    }
 }
 
 impl Matrix4x4 {
@@ -44,7 +122,7 @@ impl Matrix4x4 {
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
-            ]
+            ],
         }
     }
 
@@ -55,27 +133,8 @@ impl Matrix4x4 {
                 [0.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0, 0.0],
-            ]
+            ],
         }
-    }
-
-    pub fn scaling(factor: f64) -> Self {
-        let mut scaling_mat = Matrix4x4::identity();
-        scaling_mat.data[0][0] = factor;
-        scaling_mat.data[1][1] = factor;
-        scaling_mat.data[2][2] = factor;
-        scaling_mat.data[3][3] = 1.0;
-
-        scaling_mat
-    }
-
-    pub fn translation(x: f64, y: f64, z: f64) -> Self {
-        let mut translation_mat = Matrix4x4::identity();
-        translation_mat.data[0][3] = x;
-        translation_mat.data[1][3] = y;
-        translation_mat.data[2][3] = z;
-
-        translation_mat
     }
 }
 
@@ -110,50 +169,22 @@ impl Mul<Vec4> for Matrix4x4 {
 
     fn mul(self, rhs: Vec4) -> Vec4 {
         Vec4::new(
-            self.data[0][0] * rhs.x + self.data[0][1] * rhs.y + self.data[0][2] * rhs.z + self.data[0][3] * rhs.w,
-            self.data[1][0] * rhs.x + self.data[1][1] * rhs.y + self.data[1][2] * rhs.z + self.data[1][3] * rhs.w,
-            self.data[2][0] * rhs.x + self.data[2][1] * rhs.y + self.data[2][2] * rhs.z + self.data[2][3] * rhs.w,
-            self.data[3][0] * rhs.x + self.data[3][1] * rhs.y + self.data[3][2] * rhs.z + self.data[3][3] * rhs.w,
+            self.data[0][0] * rhs.x
+                + self.data[0][1] * rhs.y
+                + self.data[0][2] * rhs.z
+                + self.data[0][3] * rhs.w,
+            self.data[1][0] * rhs.x
+                + self.data[1][1] * rhs.y
+                + self.data[1][2] * rhs.z
+                + self.data[1][3] * rhs.w,
+            self.data[2][0] * rhs.x
+                + self.data[2][1] * rhs.y
+                + self.data[2][2] * rhs.z
+                + self.data[2][3] * rhs.w,
+            self.data[3][0] * rhs.x
+                + self.data[3][1] * rhs.y
+                + self.data[3][2] * rhs.z
+                + self.data[3][3] * rhs.w,
         )
-    }
-}
-
-impl RotationMatrices {
-    pub fn new(x_angle: f64, y_angle: f64, z_angle: f64) -> Self {
-        let mut rotations = Self {
-            xRotation: Matrix4x4::identity(),
-            yRotation: Matrix4x4::identity(),
-            zRotation: Matrix4x4::identity(),
-        };
-
-        rotations.update_angles(x_angle, y_angle, z_angle);
-
-        rotations
-    }
-
-    pub fn get_rotation(&self) -> Matrix4x4 {
-        let combined = self.zRotation * self.yRotation * self.xRotation;
-        combined
-    }
-
-    pub fn update_angles(&mut self, x_angle: f64, y_angle: f64, z_angle: f64)  {
-        let (sin_x, cos_x) = x_angle.sin_cos();
-        let (sin_y, cos_y) = y_angle.sin_cos();
-        let (sin_z, cos_z) = z_angle.sin_cos();
-
-        self.xRotation.data[1][1] = cos_x;
-        self.xRotation.data[1][2] = -sin_x;
-        self.xRotation.data[2][1] = sin_x;
-        self.xRotation.data[2][2] = cos_x;
-
-        self.yRotation.data[0][0] = cos_y;
-        self.yRotation.data[0][2] = sin_y;
-        self.yRotation.data[2][0] = -sin_y;
-        self.yRotation.data[2][2] = cos_y;
-
-        self.zRotation.data[0][0] = cos_z;
-        self.zRotation.data[0][1] = -sin_z;
-        self.zRotation.data[1][0] = sin_z;
-        self.zRotation.data[1][1] = cos_z;
     }
 }

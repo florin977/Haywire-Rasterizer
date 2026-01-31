@@ -1,21 +1,21 @@
-use std::ops::{Add, Div, Mul, Sub, Neg};
 use std::fmt;
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Vec4 {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-    pub w: f64,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
 }
 
 impl Vec4 {
-    pub fn new(x: f64, y: f64, z: f64, w: f64) -> Self {
+    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
 
-    pub fn dot(self, rhs: Vec4) -> f64 {
-        self.x * rhs.x + self.y * rhs.y + self.z * rhs.z + self.w * rhs.w 
+    pub fn dot(self, rhs: Vec4) -> f32 {
+        self.x * rhs.x + self.y * rhs.y + self.z * rhs.z + self.w * rhs.w
     }
 
     pub fn cross(self, rhs: Vec4) -> Self {
@@ -27,11 +27,11 @@ impl Vec4 {
         }
     }
 
-    pub fn magnitude_squared(self) -> f64 {
+    pub fn magnitude_squared(self) -> f32 {
         self.dot(self)
     }
 
-    pub fn magnitude(self) -> f64 {
+    pub fn magnitude(self) -> f32 {
         self.magnitude_squared().sqrt()
     }
 
@@ -39,24 +39,11 @@ impl Vec4 {
         self / self.magnitude()
     }
 }
-/*
-impl Mul for Vec4 {
+
+impl Mul<f32> for Vec4 {
     type Output = Self;
 
-    fn mul(self, rhs: Vec4) -> Self {
-        Self {
-            x: self.x * rhs.x,
-            y: self.y * rhs.y,
-            z: self.z * rhs.z,
-            w: self.w * rhs.w,
-        }
-    }
-}
-*/
-impl Mul<f64> for Vec4 {
-    type Output = Self;
-
-    fn mul(self, rhs: f64) -> Self {
+    fn mul(self, rhs: f32) -> Self {
         Self {
             x: self.x * rhs,
             y: self.y * rhs,
@@ -66,10 +53,10 @@ impl Mul<f64> for Vec4 {
     }
 }
 
-impl Div<f64> for Vec4 {
+impl Div<f32> for Vec4 {
     type Output = Vec4;
 
-    fn div(self, rhs: f64) -> Vec4 {
+    fn div(self, rhs: f32) -> Vec4 {
         if rhs == 0.0 {
             panic!("Division by 0 inside Vec4 Div Trait\n");
         }
@@ -120,7 +107,7 @@ impl Neg for Vec4 {
             y: -self.y,
             z: -self.z,
             w: -self.w,
-         }
+        }
     }
 }
 

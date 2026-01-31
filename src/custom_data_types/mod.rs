@@ -1,6 +1,9 @@
-pub mod point;
-pub mod triangle;
+pub mod camera;
 pub mod color;
 pub mod draw_buffer;
-pub mod vec4;
+pub mod game_object;
 pub mod matrices;
+pub mod mesh;
+pub mod rasterizer;
+pub mod scene;
+pub mod vec4;

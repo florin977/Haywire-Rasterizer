@@ -1,123 +1,19 @@
 // custom modules
 mod custom_data_types;
 
-use custom_data_types::color::Color;
 use custom_data_types::draw_buffer::DrawBuffer;
-use custom_data_types::matrices::{Matrix4x4, RotationMatrices};
-use custom_data_types::triangle::Triangle;
+use custom_data_types::game_object::GameObject;
+use custom_data_types::matrices::ModelMatrix;
+use custom_data_types::mesh::Mesh;
 use custom_data_types::vec4::Vec4;
 
 // external dependencies
-use minifb::{Key, Window, WindowOptions};
+use minifb::{Key, MouseMode, Window, WindowOptions};
 
-fn load_model(path: &str) -> Vec<Triangle> {
-    let mut triangles: Vec<Triangle> = vec![];
-
-    let load_options = tobj::LoadOptions {
-        triangulate: true,
-        single_index: true,
-        ..Default::default()
-    };
-
-    let (models, _materials) = tobj::load_obj(path, &load_options).expect("Failed to load models");
-
-    for m in 0..models.len() {
-        let mesh = &models[m].mesh;
-
-        for i in (0..mesh.indices.len()).step_by(3) {
-            let idx0 = mesh.indices[i] as usize;
-            let idx1 = mesh.indices[i + 1] as usize;
-            let idx2 = mesh.indices[i + 2] as usize;
-
-            let v0_x = mesh.positions[3 * idx0];
-            let v0_y = mesh.positions[3 * idx0 + 1];
-            let v0_z = mesh.positions[3 * idx0 + 2];
-
-            let v1_x = mesh.positions[3 * idx1];
-            let v1_y = mesh.positions[3 * idx1 + 1];
-            let v1_z = mesh.positions[3 * idx1 + 2];
-
-            let v2_x = mesh.positions[3 * idx2];
-            let v2_y = mesh.positions[3 * idx2 + 1];
-            let v2_z = mesh.positions[3 * idx2 + 2];
-
-            let vec0 = Vec4::new(v0_x as f64, v0_y as f64, v0_z as f64, 1.0);
-            let vec1 = Vec4::new(v1_x as f64, v1_y as f64, v1_z as f64, 1.0);
-            let vec2 = Vec4::new(v2_x as f64, v2_y as f64, v2_z as f64, 1.0);
-
-            let triangle = Triangle::new(vec0, vec1, vec2);
-
-            triangles.push(triangle);
-        }
-    }
-
-    triangles
-}
-
-fn edge_function(a_x: f64, a_y: f64, b_x: f64, b_y: f64, c_x: f64, c_y: f64) -> f64 {
-    let result = (b_x - a_x) * (c_y - a_y) - (b_y - a_y) * (c_x - a_x);
-    result
-}
-
-fn in_triangle(
-    a_x: f64,
-    a_y: f64,
-    b_x: f64,
-    b_y: f64,
-    c_x: f64,
-    c_y: f64,
-    point_x: f64,
-    point_y: f64,
-) -> bool {
-    let abp = edge_function(a_x, a_y, b_x, b_y, point_x, point_y);
-    let bcp = edge_function(b_x, b_y, c_x, c_y, point_x, point_y);
-    let cap = edge_function(c_x, c_y, a_x, a_y, point_x, point_y);
-
-    abp >= 0.0 && bcp >= 0.0 && cap >= 0.0
-}
-
-fn draw_triangle(draw_buffer: &mut DrawBuffer, triangle: &Triangle, color: Color) -> () {
-    let a_x = triangle.a().x;
-    let a_y = triangle.a().y;
-    let b_x = triangle.b().x;
-    let b_y = triangle.b().y;
-    let c_x = triangle.c().x;
-    let c_y = triangle.c().y;
-
-    let area = edge_function(a_x, a_y, b_x, b_y, c_x, c_y);
-
-    if area <= 0.0 {
-        return;
-    }
-
-    let triangle_min_x = a_x.min(b_x.min(c_x));
-    let triangle_min_y = a_y.min(b_y.min(c_y));
-    let triangle_max_x = a_x.max(b_x.max(c_x));
-    let triangle_max_y = a_y.max(b_y.max(c_y));
-
-    let min_x = (triangle_min_x.floor() as i32).max(0i32);
-    let min_y = (triangle_min_y.floor() as i32).max(0i32);
-    let max_x = (triangle_max_x.ceil() as i32).min(draw_buffer.buffer_width() as i32);
-    let max_y = (triangle_max_y.ceil() as i32).min(draw_buffer.buffer_height() as i32);
-
-    for i in min_y..max_y {
-        for j in min_x..max_x {
-            if in_triangle(a_x, a_y, b_x, b_y, c_x, c_y, j as f64, i as f64) {
-                draw_buffer.set(i as usize, j as usize, color);
-            }
-        }
-    }
-}
-
-fn handle_clear(draw_buffer: &mut DrawBuffer, window: &Window) -> () {
-    let (new_width, new_height) = window.get_size();
-
-    if draw_buffer.buffer_width() != new_width || draw_buffer.buffer_height() != new_height {
-        draw_buffer.resize(new_width, new_height);
-    } else {
-        draw_buffer.clear(Color::new(0, 0, 0, 255));
-    }
-}
+use crate::custom_data_types::camera::Camera;
+use crate::custom_data_types::color::Color;
+use crate::custom_data_types::rasterizer::Rasterizer;
+use crate::custom_data_types::scene::Scene;
 
 fn draw(draw_buffer: &mut DrawBuffer, window: &mut Window) -> () {
     window
@@ -130,12 +26,23 @@ fn draw(draw_buffer: &mut DrawBuffer, window: &mut Window) -> () {
 }
 
 fn main() {
-    let mut draw_buffer = DrawBuffer::new(vec![0; 1280 * 720], 1280, 720);
+    let mut rasterizer = Rasterizer::new(DrawBuffer::new(vec![0; 1280 * 720], 1280, 720));
+    let camera = Camera::new(
+        ModelMatrix::new(
+            Vec4::new(0.0, 0.0, 0.0, 1.0),
+            Vec4::new(0.0, 0.0, 0.0, 1.0),
+            Vec4::new(1.0, 1.0, 1.0, 1.0),
+        ),
+        90.0f32.to_radians(),
+        16.0 / 9.0,
+        1.0,
+        3000.0,
+    );
 
     let mut window = Window::new(
         "Haywire Rasterizer",
-        draw_buffer.buffer_width(),
-        draw_buffer.buffer_height(),
+        rasterizer.draw_buffer.buffer_width(),
+        rasterizer.draw_buffer.buffer_height(),
         WindowOptions {
             resize: true,
             ..WindowOptions::default()
@@ -145,41 +52,62 @@ fn main() {
 
     window.set_target_fps(60);
 
-    let triangles: Vec<Triangle> = load_model("./assets/suzzane.obj");
+    let mut meshes: Vec<Mesh> = vec![];
+    meshes.push(Mesh::new("./assets/cube.obj", ".obj"));
+    let mut obj: Vec<GameObject> = vec![];
+    obj.push(GameObject::new(
+        0,
+        ModelMatrix::new(
+            Vec4::new(0.0, 0.0, -10.0, 1.0),
+            Vec4::new(0.0, 0.0, 0.0, 1.0),
+            Vec4::new(3.0, 3.0, 3.0, 1.0),
+        ),
+    ));
 
-    let mut y_angle = 0.0;
-    let mut x_angle = 0.0;
+    let mut scene = Scene::new(meshes, obj, camera);
+    let color: Color = Color::new(100, 200, 100, 255);
+
+    let mut pos = Vec4::new(0.0, 0.0, 0.0, 1.0);
+    let mut angle = Vec4::new(0.0, 0.0, 0.0, 1.0);
+    let mut last_mouse_pos = (0.0f32, 0.0f32);
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        handle_clear(&mut draw_buffer, &window);
+        rasterizer.draw_buffer.handle_clear(&window);
 
-        y_angle += 0.01;
-        x_angle += 0.00;
+        //y_angle += 0.02;
+        //x_angle += 0.00;
 
-        let scale_mat = Matrix4x4::scaling(100.0);
+        let current_mouse_pos = window
+            .get_mouse_pos(MouseMode::Pass)
+            .unwrap_or(last_mouse_pos);
 
-        let rot_struct = RotationMatrices::new(x_angle , y_angle, 0.0);
-        let rot_mat = rot_struct.get_rotation();
+        if window.get_mouse_down(minifb::MouseButton::Left) {
+            let sensitivity = 0.005;
+            let dy = (current_mouse_pos.0 - last_mouse_pos.0) * sensitivity;
+            let dx = (current_mouse_pos.1 - last_mouse_pos.1) * sensitivity;
 
-        let trans_mat = Matrix4x4::translation(320.0, 360.0, 0.0);
-
-        let world_matrix = trans_mat * rot_mat * scale_mat;
-
-        for i in 0..triangles.len() {
-            let v0_trans = world_matrix * triangles[i].a();
-            let v1_trans = world_matrix * triangles[i].b();
-            let v2_trans = world_matrix * triangles[i].c();
-
-            let tri_to_draw = Triangle::new(v0_trans, v1_trans, v2_trans);
-            
-            if i % 2 == 0 {
-                draw_triangle(&mut draw_buffer, &tri_to_draw, Color::new(100, 250, 200, 255));
-            } else {
-                draw_triangle(&mut draw_buffer, &tri_to_draw, Color::new(255, 255, 255, 255));
-            }
-
+            angle.x += dx;
+            angle.y -= dy;
         }
 
-        draw(&mut draw_buffer, &mut window);
+        if window.is_key_down(Key::A) {
+            pos.x -= 0.1;
+        } else if window.is_key_down(Key::D) {
+            pos.x += 0.1;
+        }
+
+        if window.is_key_down(Key::W) {
+            pos.z -= 0.1;
+        } else if window.is_key_down(Key::S) {
+            pos.z += 0.1;
+        }
+
+        scene.camera.model.update_translate(pos);
+        scene.camera.model.update_angle(angle);
+
+        rasterizer.draw_scene(&scene, color);
+        draw(&mut rasterizer.draw_buffer, &mut window);
+
+        last_mouse_pos = current_mouse_pos;
     }
 }

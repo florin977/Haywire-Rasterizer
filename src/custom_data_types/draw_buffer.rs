@@ -1,4 +1,5 @@
 use super::color::Color;
+use minifb::Window;
 
 pub struct DrawBuffer {
     buffer: Vec<u32>,
@@ -11,41 +12,66 @@ pub struct DrawBuffer {
 impl DrawBuffer {
     pub fn new(buffer: Vec<u32>, buffer_width: usize, buffer_height: usize) -> Self {
         if buffer_width == 0 || buffer_height == 0 {
-            return Self { buffer, buffer_width, buffer_height , step_x: 0.1, step_y: 0.1 };
+            return Self {
+                buffer,
+                buffer_width,
+                buffer_height,
+                step_x: 0.1,
+                step_y: 0.1,
+            };
         }
-        Self { buffer, buffer_width, buffer_height , step_x: 2.0 / (buffer_width as f64), step_y: 2.0 / (buffer_height as f64)}
+        Self {
+            buffer,
+            buffer_width,
+            buffer_height,
+            step_x: 2.0 / (buffer_width as f64),
+            step_y: 2.0 / (buffer_height as f64),
+        }
     }
 
-    pub fn buffer_width(&self) -> usize { self.buffer_width }
-    pub fn buffer_height(&self) -> usize { self.buffer_height }
-    pub fn buffer(&self) -> &Vec<u32> { &self.buffer }
+    pub fn buffer_width(&self) -> usize {
+        self.buffer_width
+    }
+    pub fn buffer_height(&self) -> usize {
+        self.buffer_height
+    }
+    pub fn buffer(&self) -> &Vec<u32> {
+        &self.buffer
+    }
 
-    pub fn clear(&mut self, clear_color: Color) {
+    fn clear(&mut self, clear_color: Color) {
         self.buffer.fill(clear_color.format_as_u32());
     }
-    
+
+    pub fn handle_clear(&mut self, window: &Window) -> () {
+        let (new_width, new_height) = window.get_size();
+
+        if self.buffer_width() != new_width || self.buffer_height() != new_height {
+            self.resize(new_width, new_height);
+        } else {
+            self.clear(Color::new(0, 0, 0, 255));
+        }
+    }
+
     pub fn resize(&mut self, buffer_width: usize, buffer_height: usize) {
         self.buffer_width = buffer_width;
         self.buffer_height = buffer_height;
         self.buffer = vec![0; self.buffer_width() * self.buffer_height()];
 
-        if (buffer_height == 0 || buffer_width == 0) {
+        if buffer_height == 0 || buffer_width == 0 {
             self.step_x = 0.1;
             self.step_y = 0.1;
-        }
-        else {
+        } else {
             self.step_x = 2.0 / (buffer_width as f64);
             self.step_y = 2.0 / (buffer_height as f64);
         }
     }
 
-    pub fn get(&self, x: usize, y: usize) -> u32 {
-        self.buffer
-                    [(self.buffer_height - x - 1) * self.buffer_width + y]
-    }
+    /* pub fn get(&self, x: usize, y: usize) -> u32 {
+        self.buffer[(self.buffer_height - x - 1) * self.buffer_width + y]
+    }*/
 
     pub fn set(&mut self, x: usize, y: usize, color: Color) {
-        self.buffer
-                    [(self.buffer_height - x - 1) * self.buffer_width + y] = color.format_as_u32();
+        self.buffer[(self.buffer_height - x - 1) * self.buffer_width + y] = color.format_as_u32();
     }
 }
