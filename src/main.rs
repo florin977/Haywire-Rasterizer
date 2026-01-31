@@ -53,7 +53,7 @@ fn main() {
     window.set_target_fps(60);
 
     let mut meshes: Vec<Mesh> = vec![];
-    meshes.push(Mesh::new("./assets/cube.obj", ".obj"));
+    meshes.push(Mesh::new("./assets/dragon.obj", ".obj"));
     let mut obj: Vec<GameObject> = vec![];
     obj.push(GameObject::new(
         0,
