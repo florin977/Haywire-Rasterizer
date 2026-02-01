@@ -1,5 +1,6 @@
 pub mod camera;
 pub mod color;
+pub mod depth_buffer;
 pub mod draw_buffer;
 pub mod game_object;
 pub mod matrices;

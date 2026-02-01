@@ -1,24 +1,30 @@
 use super::color::Color;
+use super::depth_buffer::DepthBuffer;
 use super::draw_buffer::DrawBuffer;
 use super::vec4::Vec4;
 use crate::custom_data_types::camera::Camera;
 use crate::custom_data_types::matrices::Matrix4x4;
 use crate::custom_data_types::scene::Scene;
+use rand::Rng;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 pub struct Rasterizer {
     pub draw_buffer: DrawBuffer,
-    // TODO: implement the depth buffer
-    // depth_bufffer: DepthBuffer,
+    pub depth_buffer: DepthBuffer,
 }
 
 impl Rasterizer {
-    pub fn new(draw_buffer: DrawBuffer) -> Self {
-        Self { draw_buffer }
+    pub fn new(draw_buffer: DrawBuffer, depth_buffer: DepthBuffer) -> Self {
+        Self {
+            draw_buffer,
+            depth_buffer,
+        }
     }
 
     fn viewport_transform(&self, point: Vec4) -> (i32, i32, f32) {
         let x = (point.x + 1.0) * 0.5 * self.draw_buffer.buffer_width() as f32;
-        let y = (1.0 - point.y) * 0.5 * self.draw_buffer.buffer_height() as f32;
+        let y = (point.y + 1.0) * 0.5 * self.draw_buffer.buffer_height() as f32;
         let z = (point.z + 1.0) * 0.5;
 
         (x as i32, y as i32, z)
@@ -30,16 +36,23 @@ impl Rasterizer {
     }
 
     fn in_triangle(
+        &self,
         a: (i32, i32, f32),
         b: (i32, i32, f32),
         c: (i32, i32, f32),
         point: (i32, i32, f32),
-    ) -> bool {
-        let abp = Self::edge_function(a, b, point);
-        let bcp = Self::edge_function(b, c, point);
-        let cap = Self::edge_function(c, a, point);
+    ) -> (bool, f32) {
+        let abp = Self::edge_function(a, b, point) as f32;
+        let bcp = Self::edge_function(b, c, point) as f32;
+        let cap = Self::edge_function(c, a, point) as f32;
+        let total_area = abp + bcp + cap;
+        let weight_c = abp / total_area;
+        let weight_a = bcp / total_area;
+        let weight_b = cap / total_area;
 
-        return abp >= 0 && bcp >= 0 && cap >= 0;
+        let z_coord = c.2 * weight_c + b.2 * weight_b + a.2 * weight_a;
+
+        return (abp >= 0.0 && bcp >= 0.0 && cap >= 0.0, z_coord);
     }
 
     fn fill_triangle(
@@ -61,8 +74,18 @@ impl Rasterizer {
 
         for i in min_y..max_y {
             for j in min_x..max_x {
-                if Self::in_triangle(a, b, c, (j, i, 0.0)) {
-                    self.draw_buffer.set(i as usize, j as usize, color);
+                let (in_trig, z_coord) = Self::in_triangle(&self, a, b, c, (j, i, 0.0));
+                let buffer_value = self.depth_buffer.get(i as usize, j as usize);
+
+                if in_trig && z_coord < buffer_value {
+                    self.depth_buffer.set(i as usize, j as usize, z_coord);
+                    let depth_color = (255.0 * z_coord) as u8;
+
+                    self.draw_buffer.set(
+                        i as usize,
+                        j as usize,
+                        Color::new(depth_color, depth_color, depth_color, depth_color),
+                    );
                 }
             }
         }
@@ -99,11 +122,10 @@ impl Rasterizer {
 
         (Some(a), Some(b), Some(c))
     }
-    pub fn draw_scene(&mut self, scene: &Scene, color: Color) {
-        let view_matrix = scene.camera.model.get_view_matrix();
+    pub fn draw_scene(&mut self, scene: &Scene, colors: &Vec<Color>) {
+        let view_matrix = scene.camera.get_view_matrix();
         let projection_matrix = scene.camera.get_projection_matrix();
         let pv = projection_matrix * view_matrix;
-        let color2 = Color::new(255, 200, 150, 255);
 
         for obj in &scene.objects {
             let model_matrix = obj.model_matrix.get_model_matrix();
@@ -127,12 +149,7 @@ impl Rasterizer {
                         continue;
                     }
 
-                    self.fill_triangle(
-                        p0,
-                        p1,
-                        p2,
-                        Color::mix(color, color2, (i % 101) as f32 / 100.0),
-                    );
+                    self.fill_triangle(p0, p1, p2, colors[i % colors.len()]);
                 }
             }
         }
