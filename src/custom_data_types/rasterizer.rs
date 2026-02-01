@@ -5,9 +5,6 @@ use super::vec4::Vec4;
 use crate::custom_data_types::camera::Camera;
 use crate::custom_data_types::matrices::Matrix4x4;
 use crate::custom_data_types::scene::Scene;
-use rand::Rng;
-use rand::SeedableRng;
-use rand::rngs::StdRng;
 
 pub struct Rasterizer {
     pub draw_buffer: DrawBuffer,

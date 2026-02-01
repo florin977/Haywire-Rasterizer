@@ -76,7 +76,7 @@ fn main() {
     let mut last_mouse_pos = (0.0f32, 0.0f32);
     let mut random_colors: Vec<Color> = vec![];
 
-    for i in 0..100 {
+    for _i in 0..100 {
         let r = rand::thread_rng().gen_range(50..255);
         let g = rand::thread_rng().gen_range(50..255);
         let b = rand::thread_rng().gen_range(50..255);
