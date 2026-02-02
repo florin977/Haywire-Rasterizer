@@ -21,6 +21,12 @@ impl ModelMatrix {
         }
     }
 
+    // If there was a non-uniform scaling applied, then the inverse
+    // must be calculated for the normals.
+    pub fn inverse_needed_for_normals(&self) -> bool {
+        return !(self.scale.x == self.scale.y && self.scale.y == self.scale.z);
+    }
+
     pub fn angle(&self) -> Vec4 {
         self.angle
     }
@@ -41,6 +47,8 @@ impl ModelMatrix {
         self.scale = scale;
     }
 
+    // Assumes only T, R and S operations were performed,
+    // then computed the M matrix based on them
     pub fn get_model_matrix(&self) -> Matrix4x4 {
         let mut model_matrix = Matrix4x4::identity();
 

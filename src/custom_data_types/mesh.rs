@@ -7,6 +7,7 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    // Loads the vertices, indices and normals for one object in a .obj file
     pub fn new(path: &str, obj_type: &str) -> Self {
         let mesh: Mesh;
         if obj_type == ".obj" {
@@ -33,7 +34,7 @@ impl Mesh {
                 normals = mesh_data
                     .normals
                     .chunks(3)
-                    .map(|n| Vec4::new(n[0], n[1], n[2], 0.0))
+                    .map(|n| Vec4::new(n[0], n[1], n[2], 0.0001))
                     .collect();
             }
 

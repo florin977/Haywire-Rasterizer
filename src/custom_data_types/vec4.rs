@@ -35,7 +35,7 @@ impl Vec4 {
         self.magnitude_squared().sqrt()
     }
 
-    pub fn norm(self) -> Self {
+    pub fn normalize(self) -> Self {
         self / self.magnitude()
     }
 }
