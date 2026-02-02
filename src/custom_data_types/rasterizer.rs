@@ -2,7 +2,7 @@ use super::color::Color;
 use super::depth_buffer::DepthBuffer;
 use super::draw_buffer::DrawBuffer;
 use super::vec4::Vec4;
-use crate::custom_data_types::camera::Camera;
+use crate::custom_data_types::camera::{self, Camera};
 use crate::custom_data_types::matrices::Matrix4x4;
 use crate::custom_data_types::scene::Scene;
 
@@ -79,13 +79,21 @@ impl Rasterizer {
                     let depth_color = (255.0 * z_coord) as u8;
 
                     self.draw_buffer.set(
-                        i as usize,
-                        j as usize,
-                        Color::new(depth_color, depth_color, depth_color, depth_color),
+                        i as usize, j as usize,
+                        color,
+                        //Color::new(depth_color, depth_color, depth_color, depth_color),
                     );
                 }
             }
         }
+    }
+
+    fn find_t(a: Vec4, b: Vec4, camera: &Camera) -> f32 {
+        (-a.z - camera.z_near) / (b.z - a.z)
+    }
+
+    fn lerp(a: Vec4, b: Vec4, t: f32) -> Vec4 {
+        a + (b - a) * t
     }
 
     pub fn world_to_screen(
@@ -99,26 +107,126 @@ impl Rasterizer {
         Option<(i32, i32, f32)>,
         Option<(i32, i32, f32)>,
         Option<(i32, i32, f32)>,
+        Option<(i32, i32, f32)>,
     ) {
         let v0_clip = *mvp * v0;
         let v1_clip = *mvp * v1;
         let v2_clip = *mvp * v2;
 
-        // TODO: actually split the triangles to handle ones behind the camera
-        if v0_clip.w < camera.z_near || v1_clip.w < camera.z_near || v2_clip.w < camera.z_near {
-            return (None, None, None);
+        let to_screen = |v: Vec4| -> (i32, i32, f32) {
+            let ndc = v / v.w; // Perspective Divide
+            Self::viewport_transform(self, ndc)
+        };
+
+        let mut behind_camera = (false, false, false);
+        let mut total_behind_camera = 0;
+        if v0_clip.w < camera.z_near {
+            behind_camera.0 = true;
+            total_behind_camera += 1;
+        }
+        if v1_clip.w < camera.z_near {
+            behind_camera.1 = true;
+            total_behind_camera += 1;
+        }
+        if v2_clip.w < camera.z_near {
+            behind_camera.2 = true;
+            total_behind_camera += 1;
         }
 
-        let v0_ndc = v0_clip / v0_clip.w;
-        let v1_ndc = v1_clip / v1_clip.w;
-        let v2_ndc = v2_clip / v2_clip.w;
+        if total_behind_camera == 3 {
+            return (None, None, None, None);
+        } else if total_behind_camera == 2 {
+            if !behind_camera.0 {
+                let t1 = Self::find_t(v0_clip, v1_clip, camera);
+                let t2 = Self::find_t(v0_clip, v2_clip, camera);
 
-        let a = Self::viewport_transform(&self, v0_ndc);
-        let b = Self::viewport_transform(&self, v1_ndc);
-        let c = Self::viewport_transform(&self, v2_ndc);
+                let new_v1 = Self::lerp(v0_clip, v1_clip, t1);
+                let new_v2 = Self::lerp(v0_clip, v2_clip, t2);
 
-        (Some(a), Some(b), Some(c))
+                return (
+                    Some(to_screen(v0_clip)),
+                    Some(to_screen(new_v1)),
+                    Some(to_screen(new_v2)),
+                    None,
+                );
+            } else if !behind_camera.1 {
+                let t2 = Self::find_t(v1_clip, v2_clip, camera);
+                let t0 = Self::find_t(v1_clip, v0_clip, camera);
+
+                let new_v2 = Self::lerp(v1_clip, v2_clip, t2);
+                let new_v0 = Self::lerp(v1_clip, v0_clip, t0);
+
+                return (
+                    Some(to_screen(v1_clip)),
+                    Some(to_screen(new_v2)),
+                    Some(to_screen(new_v0)),
+                    None,
+                );
+            } else if !behind_camera.2 {
+                let t0 = Self::find_t(v2_clip, v0_clip, camera);
+                let t1 = Self::find_t(v2_clip, v1_clip, camera);
+
+                let new_v0 = Self::lerp(v2_clip, v0_clip, t0);
+                let new_v1 = Self::lerp(v2_clip, v1_clip, t1);
+
+                return (
+                    Some(to_screen(v2_clip)),
+                    Some(to_screen(new_v0)),
+                    Some(to_screen(new_v1)),
+                    None,
+                );
+            }
+        } else if total_behind_camera == 1 {
+            if behind_camera.0 {
+                let t_20 = Self::find_t(v2_clip, v0_clip, camera); // Cut on V2->V0
+                let t_10 = Self::find_t(v1_clip, v0_clip, camera); // Cut on V1->V0
+
+                let new_v2 = Self::lerp(v2_clip, v0_clip, t_20);
+                let new_v1 = Self::lerp(v1_clip, v0_clip, t_10);
+
+                return (
+                    Some(to_screen(v1_clip)),
+                    Some(to_screen(v2_clip)),
+                    Some(to_screen(new_v2)),
+                    Some(to_screen(new_v1)),
+                );
+            } else if behind_camera.1 {
+                let t_01 = Self::find_t(v0_clip, v1_clip, camera);
+                let t_21 = Self::find_t(v2_clip, v1_clip, camera);
+
+                let new_v0 = Self::lerp(v0_clip, v1_clip, t_01);
+                let new_v2 = Self::lerp(v2_clip, v1_clip, t_21);
+
+                return (
+                    Some(to_screen(v2_clip)),
+                    Some(to_screen(v0_clip)),
+                    Some(to_screen(new_v0)),
+                    Some(to_screen(new_v2)),
+                );
+            } else if behind_camera.2 {
+                let t_12 = Self::find_t(v1_clip, v2_clip, camera);
+                let t_02 = Self::find_t(v0_clip, v2_clip, camera);
+
+                let new_v1 = Self::lerp(v1_clip, v2_clip, t_12);
+                let new_v0 = Self::lerp(v0_clip, v2_clip, t_02);
+
+                return (
+                    Some(to_screen(v0_clip)),
+                    Some(to_screen(v1_clip)),
+                    Some(to_screen(new_v1)),
+                    Some(to_screen(new_v0)),
+                );
+            }
+        }
+
+        (
+            Some(to_screen(v0_clip)),
+            Some(to_screen(v1_clip)),
+            Some(to_screen(v2_clip)),
+            None,
+        )
     }
+
     pub fn draw_scene(&mut self, scene: &Scene, colors: &Vec<Color>) {
         let view_matrix = scene.camera.get_view_matrix();
         let projection_matrix = scene.camera.get_projection_matrix();
@@ -138,15 +246,25 @@ impl Rasterizer {
                 let v0_local = mesh.vertices[idx0];
                 let v1_local = mesh.vertices[idx1];
                 let v2_local = mesh.vertices[idx2];
-                if let (Some(p0), Some(p1), Some(p2)) =
-                    self.world_to_screen(v0_local, v1_local, v2_local, &mvp, &scene.camera)
-                {
+                let (opt0, opt1, opt2, opt3) =
+                    self.world_to_screen(v0_local, v1_local, v2_local, &mvp, &scene.camera);
+
+                if let (Some(p0), Some(p1), Some(p2)) = (opt0, opt1, opt2) {
                     let area = Self::edge_function(p0, p1, p2);
                     if area <= 0 {
                         continue;
                     }
 
                     self.fill_triangle(p0, p1, p2, colors[i % colors.len()]);
+
+                    if let Some(p3) = opt3 {
+                        let area = Self::edge_function(p0, p2, p3);
+                        if area <= 0 {
+                            continue;
+                        }
+
+                        self.fill_triangle(p0, p2, p3, colors[i % colors.len()]);
+                    }
                 }
             }
         }
