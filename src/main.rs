@@ -59,13 +59,43 @@ fn main() {
 
     let mut meshes: Vec<Mesh> = vec![];
     meshes.push(Mesh::new("./assets/dragon.obj", ".obj"));
+    meshes.push(Mesh::new("./assets/suzzane.obj", ".obj"));
+    meshes.push(Mesh::new("./assets/cube.obj", ".obj"));
+    meshes.push(Mesh::new("./assets/bunny.obj", ".obj"));
     let mut obj: Vec<GameObject> = vec![];
     obj.push(GameObject::new(
         0,
         ModelMatrix::new(
             Vec4::new(0.0, 0.0, -10.0, 1.0),
+            Vec4::new(0.0, 90.0f32.to_radians(), 0.0, 1.0),
+            Vec4::new(15.0, 15.0, 15.0, 1.0),
+        ),
+    ));
+
+    obj.push(GameObject::new(
+        1,
+        ModelMatrix::new(
+            Vec4::new(10.0, 0.0, -10.0, 1.0),
             Vec4::new(0.0, 0.0, 0.0, 1.0),
-            Vec4::new(7.0, 7.0, 7.0, 1.0),
+            Vec4::new(1.0, 1.0, 1.0, 1.0),
+        ),
+    ));
+
+    obj.push(GameObject::new(
+        2,
+        ModelMatrix::new(
+            Vec4::new(10.0, 0.0, -5.0, 1.0),
+            Vec4::new(0.0, 0.0, 0.0, 1.0),
+            Vec4::new(1.0, 1.0, 1.0, 1.0),
+        ),
+    ));
+
+    obj.push(GameObject::new(
+        3,
+        ModelMatrix::new(
+            Vec4::new(20.0, 0.0, -10.0, 1.0),
+            Vec4::new(0.0, 0.0, 0.0, 1.0),
+            Vec4::new(30.0, 30.0, 30.0, 1.0),
         ),
     ));
 

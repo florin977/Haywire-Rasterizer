@@ -85,7 +85,7 @@ impl Rasterizer {
         let max_y = max_y.min(self.draw_buffer.buffer_height() as i32);
 
         // Default light, going in from the camera: To be properly implemented
-        let light = Vec4::new(0.0, 0.0, -1.0, 0.0).normalize();
+        let light = Vec4::new(5.0, 1.0, -0.25, 0.0).normalize();
 
         for i in min_y..max_y {
             for j in min_x..max_x {
@@ -95,8 +95,7 @@ impl Rasterizer {
 
                 if in_trig && z_coord < buffer_value {
                     self.depth_buffer.set(i as usize, j as usize, z_coord);
-                    let depth_color = (255.0 * z_coord) as u8;
-                    let intensity = pixel_normal.dot(light).max(0.1);
+                    let intensity = pixel_normal.dot(light).max(0.15);
 
                     self.draw_buffer.set(
                         i as usize,
@@ -119,6 +118,60 @@ impl Rasterizer {
         a + (b - a) * t
     }
 
+    // V0 is never behind the camera; V1 is in case == 2; V2 is in case == 1 || case == 2
+    fn handle_behind_camera(
+        &self,
+        v0: Vec4,
+        v1: Vec4,
+        v2: Vec4,
+        behind_camera: i32,
+        camera: &Camera,
+    ) -> (
+        Option<(i32, i32, f32)>,
+        Option<(i32, i32, f32)>,
+        Option<(i32, i32, f32)>,
+        Option<(i32, i32, f32)>,
+    ) {
+        let to_screen = |v: Vec4| -> (i32, i32, f32) {
+            let ndc = v / v.w; // Perspective Divide
+            Self::viewport_transform(self, ndc)
+        };
+
+        if behind_camera == 2 {
+            let t1 = Self::find_t(v0, v1, camera);
+            let t2 = Self::find_t(v0, v2, camera);
+            let new_v1 = Self::lerp(v0, v1, t1);
+            let new_v2 = Self::lerp(v0, v2, t2);
+
+            return (
+                Some(to_screen(v0)),
+                Some(to_screen(new_v1)),
+                Some(to_screen(new_v2)),
+                None,
+            );
+        } else if behind_camera == 1 {
+            let t_12 = Self::find_t(v1, v2, camera);
+            let t_02 = Self::find_t(v0, v2, camera);
+
+            let new_v1 = Self::lerp(v1, v2, t_12);
+            let new_v0 = Self::lerp(v0, v2, t_02);
+
+            return (
+                Some(to_screen(v0)),
+                Some(to_screen(v1)),
+                Some(to_screen(new_v1)),
+                Some(to_screen(new_v0)),
+            );
+        }
+
+        (
+            Some(to_screen(v0)),
+            Some(to_screen(v1)),
+            Some(to_screen(v2)),
+            None,
+        )
+    }
+
     // Transforms the vertices from local to screen space,
     // also handles triangles that have 1 or 2 vertices behind the camera
     // (triangles fully behind get culled)
@@ -135,12 +188,6 @@ impl Rasterizer {
         Option<(i32, i32, f32)>,
         Option<(i32, i32, f32)>,
     ) {
-        let to_screen = |v: Vec4| -> (i32, i32, f32) {
-            let ndc = v / v.w; // Perspective Divide
-            Self::viewport_transform(self, ndc)
-        };
-
-        // TODO: Clear this family reunion of if-else...
         let mut behind_camera = (false, false, false);
         let mut total_behind_camera = 0;
         if v0.w < camera.z_near {
@@ -160,94 +207,25 @@ impl Rasterizer {
             return (None, None, None, None);
         } else if total_behind_camera == 2 {
             if !behind_camera.0 {
-                let t1 = Self::find_t(v0, v1, camera);
-                let t2 = Self::find_t(v0, v2, camera);
-
-                let new_v1 = Self::lerp(v0, v1, t1);
-                let new_v2 = Self::lerp(v0, v2, t2);
-
-                return (
-                    Some(to_screen(v0)),
-                    Some(to_screen(new_v1)),
-                    Some(to_screen(new_v2)),
-                    None,
-                );
+                // Important: the relative order of the vertices must be kept, so they are CCW
+                // (any shift of v0-v1-v2 is valid)
+                return Self::handle_behind_camera(&self, v0, v1, v2, total_behind_camera, camera);
             } else if !behind_camera.1 {
-                let t2 = Self::find_t(v1, v2, camera);
-                let t0 = Self::find_t(v1, v0, camera);
-
-                let new_v2 = Self::lerp(v1, v2, t2);
-                let new_v0 = Self::lerp(v1, v0, t0);
-
-                return (
-                    Some(to_screen(v1)),
-                    Some(to_screen(new_v2)),
-                    Some(to_screen(new_v0)),
-                    None,
-                );
-            } else if !behind_camera.2 {
-                let t0 = Self::find_t(v2, v0, camera);
-                let t1 = Self::find_t(v2, v1, camera);
-
-                let new_v0 = Self::lerp(v2, v0, t0);
-                let new_v1 = Self::lerp(v2, v1, t1);
-
-                return (
-                    Some(to_screen(v2)),
-                    Some(to_screen(new_v0)),
-                    Some(to_screen(new_v1)),
-                    None,
-                );
+                return Self::handle_behind_camera(&self, v1, v2, v0, total_behind_camera, camera);
+            } else {
+                return Self::handle_behind_camera(&self, v2, v0, v1, total_behind_camera, camera);
             }
         } else if total_behind_camera == 1 {
             if behind_camera.0 {
-                let t_20 = Self::find_t(v2, v0, camera); // Cut on V2->V0
-                let t_10 = Self::find_t(v1, v0, camera); // Cut on V1->V0
-
-                let new_v2 = Self::lerp(v2, v0, t_20);
-                let new_v1 = Self::lerp(v1, v0, t_10);
-
-                return (
-                    Some(to_screen(v1)),
-                    Some(to_screen(v2)),
-                    Some(to_screen(new_v2)),
-                    Some(to_screen(new_v1)),
-                );
+                return Self::handle_behind_camera(&self, v1, v2, v0, total_behind_camera, camera);
             } else if behind_camera.1 {
-                let t_01 = Self::find_t(v0, v1, camera);
-                let t_21 = Self::find_t(v2, v1, camera);
-
-                let new_v0 = Self::lerp(v0, v1, t_01);
-                let new_v2 = Self::lerp(v2, v1, t_21);
-
-                return (
-                    Some(to_screen(v2)),
-                    Some(to_screen(v0)),
-                    Some(to_screen(new_v0)),
-                    Some(to_screen(new_v2)),
-                );
-            } else if behind_camera.2 {
-                let t_12 = Self::find_t(v1, v2, camera);
-                let t_02 = Self::find_t(v0, v2, camera);
-
-                let new_v1 = Self::lerp(v1, v2, t_12);
-                let new_v0 = Self::lerp(v0, v2, t_02);
-
-                return (
-                    Some(to_screen(v0)),
-                    Some(to_screen(v1)),
-                    Some(to_screen(new_v1)),
-                    Some(to_screen(new_v0)),
-                );
+                return Self::handle_behind_camera(&self, v2, v0, v1, total_behind_camera, camera);
+            } else {
+                return Self::handle_behind_camera(&self, v0, v1, v2, total_behind_camera, camera);
             }
+        } else {
+            return Self::handle_behind_camera(&self, v0, v1, v2, total_behind_camera, camera);
         }
-
-        (
-            Some(to_screen(v0)),
-            Some(to_screen(v1)),
-            Some(to_screen(v2)),
-            None,
-        )
     }
 
     // Draws every object in the scene and applies basic lightning (WIP)
@@ -299,7 +277,7 @@ impl Rasterizer {
                             n1 = (model_matrix * n1).normalize();
                             n2 = (model_matrix * n2).normalize();
                         } else {
-                            println!("Cannot handle non-uniform sccaling yet!");
+                            println!("Cannot handle non-uniform scaling yet!");
                         }
                     } else {
                         // Fallback to flat shading
